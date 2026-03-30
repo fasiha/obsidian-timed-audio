@@ -1,6 +1,10 @@
 # Timed Audio — Obsidian plugin
 
-Play a bounded clip of a local audio file directly from a note, with one button per lyric line (or any timestamped text).
+Makes native `<audio>` tags with local file paths work in Obsidian reading mode, including W3C media fragment timestamps for clipping to a specific range.
+
+## The problem
+
+Obsidian rewrites `src` on `<img>` tags to the internal `app://` URL scheme, but does not do the same for `<audio>`. This plugin's post-processor performs that rewrite so local audio files load correctly.
 
 ## Installation
 
@@ -11,52 +15,63 @@ No build step required — the plugin is plain JavaScript.
 
 ## Usage
 
-Place a `<span data-timed-audio>` tag anywhere in your note:
+Use `data-src` instead of `src` (to prevent the browser from resolving the path against the wrong base URL before the plugin can intercept it):
 
 ```markdown
-春の風… <span data-timed-audio data-start="0:04.200" data-end="0:07.800" data-path="song.webm"></span>
-夢の中で… <span data-timed-audio data-start="0:07.900" data-end="0:11.300" data-path="song.webm"></span>
+冬を過ぎまた月日を数える <audio controls data-src="song.webm#t=47.62,52.12" />
+手をつなぐ花摘みうたう <audio controls data-src="song.webm#t=58.52,60.78" />
 ```
 
-In **Reading mode** each tag is replaced by a small ▶ button. Click it to play the clip; click again to stop early. The button returns to ▶ automatically when the clip ends.
+In **Reading mode** each tag renders as an inline audio widget clipped to that time range. The `#t=start,end` syntax is the [W3C Media Fragments](https://www.w3.org/TR/media-frags/) standard, with times in seconds.
 
-### Attributes
-
-| Attribute | Format | Description |
-|-----------|--------|-------------|
-| `data-start` | `MM:SS.SSS` or `SS.SSS` | Start time in the audio file |
-| `data-end` | `MM:SS.SSS` or `SS.SSS` | End time (playback stops here automatically) |
-| `data-path` | filename or relative path | Audio file, resolved relative to the note's folder |
-
-### Example file layout
-
-```
-Music/
-  lyrics.md
-  song.webm
-```
-
-The `data-path` attribute would just be `song.webm`.
+The `data-src` path is resolved relative to the note's folder, so the audio file should sit next to the Markdown file.
 
 ## Audio format
 
 **Use WebM/Opus (or OGG/Opus), not MP3.**
 
-MP3 does not support accurate random-access seeking. Browsers estimate the byte offset from the timestamp using bitrate math, and the estimate can be off by a variable amount in either direction — sometimes half a second early, sometimes several hundred milliseconds late. There is no way to fix this in the plugin.
-
-WebM/Opus and OGG/Opus have a proper seek index and produce frame-accurate results. To convert:
+MP3 does not support accurate random-access seeking. Browsers estimate seek positions using bitrate math, which can be off by a variable amount in either direction. WebM/Opus has a proper seek index and produces frame-accurate results.
 
 ```sh
 ffmpeg -i input.mp3 -c:a libopus -b:a 96k output.webm
 ```
 
-96 kbps Opus often sounds better than 128 kbps MP3 and the file will likely be smaller.
+## Generating timestamps from an SRT file
 
-## Generating timestamps
+If you have an SRT subtitle file (e.g. from [Whisper](https://github.com/openai/whisper) or [stable-ts](https://github.com/jianfch/stable-ts)), this script converts it to a Markdown file with one `<audio>` tag per line:
 
-A straightforward workflow using [stable-ts](https://github.com/jianfch/stable-ts) (Whisper-based transcription with word-level timestamps): more information forthcoming.
+```js
+#!/usr/bin/env node
+// srt-to-md.mjs
+// Usage: node srt-to-md.mjs <file.srt> <audio.webm> > output.md
+
+import { readFileSync } from "fs";
+
+const [, , srtFile, audioFile] = process.argv;
+if (!srtFile || !audioFile) {
+  console.error("Usage: node srt-to-md.mjs <file.srt> <audio.webm>");
+  process.exit(1);
+}
+
+function srtTimeToSeconds(ts) {
+  return ts.replace(",", ".").split(":").reverse()
+    .reduce((acc, v, i) => acc + parseFloat(v) * 60 ** i, 0);
+}
+
+const blocks = readFileSync(srtFile, "utf8").trim().split(/\n\n+/);
+for (const block of blocks) {
+  const rows = block.split("\n").map((r) => r.trim());
+  if (rows.length < 3 || !rows[1].includes("-->")) continue;
+  const [startStr, endStr] = rows[1].split("-->").map((s) => s.trim());
+  const start = srtTimeToSeconds(startStr).toFixed(3);
+  const end = srtTimeToSeconds(endStr).toFixed(3);
+  const text = rows.slice(2).join(" ");
+  console.log(`${text} <audio controls data-src="${audioFile}#t=${start},${end}" />`);
+  console.log();
+}
+```
 
 ## Limitations
 
-- Reading mode only. Live Preview is not supported.
-- The `<span data-timed-audio>` syntax is used instead of a custom element like `<timed-audio />` because Obsidian's HTML sanitizer strips unknown element names before post-processors run; `data-*` attributes on standard elements survive.
+- Reading mode only. Live Preview (CodeMirror 6) would require a separate editor extension and is not currently supported.
+- `data-src` is used instead of `src` because the browser resolves `src` immediately on parse, before the post-processor runs, using the wrong base URL.

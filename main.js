@@ -1,64 +1,30 @@
 /*
   Timed Audio — Obsidian plugin
-  Replaces <span data-timed-audio data-start="MM:SS.s" data-end="MM:SS.s" data-path="file.mp3"></span>
-  with a play/stop button that clips the audio to [start, end].
+  Fixes the src on <audio> tags so local files resolve correctly in Obsidian.
+  Obsidian rewrites <img> src attributes to app:// URLs but not <audio> src.
+  This post-processor does the same rewrite for audio, so standard
+  W3C media fragment syntax works:
+    <audio src="song.webm#t=10.48,14.76" controls></audio>
   Only active in Reading mode (MarkdownPostProcessor).
-
-  NOTE: Custom HTML elements like <timed-audio> are stripped by Obsidian's
-  sanitizer before post-processors run. Using <span data-timed-audio> instead
-  because data-* attributes on known elements survive sanitization.
 */
 
 const { Plugin } = require("obsidian");
 
-const TAG = "timed-audio";
-
-/** Parse "MM:SS.s" or "SS.s" into seconds (float). */
-function parseTimestamp(ts) {
-  const parts = ts.split(":");
-  if (parts.length === 2) {
-    return parseFloat(parts[0]) * 60 + parseFloat(parts[1]);
-  }
-  return parseFloat(ts);
-}
-
 module.exports = class TimedAudioPlugin extends Plugin {
   async onload() {
-    console.log(`[${TAG}] plugin loaded`);
-
     this.registerMarkdownPostProcessor((el, ctx) => {
-      el.querySelectorAll("[data-timed-audio]").forEach((tag) => {
-        const startAttr = tag.dataset.start ?? "0";
-        const endAttr   = tag.dataset.end   ?? "0";
-        const start     = parseTimestamp(startAttr);
-        const end       = parseTimestamp(endAttr);
+      const noteDir = ctx.sourcePath.replace(/\/[^/]+$/, "");
 
-        const noteDir = ctx.sourcePath.replace(/\/[^/]+$/, "");
-        const vaultRelative = noteDir ? noteDir + "/" + (tag.dataset.path ?? "") : (tag.dataset.path ?? "");
-        const resourceUrl = this.app.vault.adapter.getResourcePath(vaultRelative);
-
-        const btn = createEl("button", {
-          text: "▶",
-          cls: "timed-audio-btn",
-          title: `Play ${startAttr} → ${endAttr}`,
-        });
-
-        let audio = null;
-
-        btn.addEventListener("click", () => {
-          if (audio && !audio.paused) {
-            audio.pause();
-            return;
-          }
-          audio = new Audio(resourceUrl);
-          audio.currentTime = start;
-          audio.play();
-          btn.setText("⏹");
-          setTimeout(() => audio.pause(), (end - start) * 1000);
-          audio.addEventListener("pause", () => btn.setText("▶"), { once: true });
-        });
-
-        tag.replaceWith(btn);
+      // Use data-src instead of src so the browser doesn't resolve the
+      // relative path against the wrong base URL before we can intercept it.
+      el.querySelectorAll("audio[data-src]").forEach((audio) => {
+        const src = audio.dataset.src;
+        // Split off any media fragment (#t=start,end) before resolving path.
+        const [path, fragment] = src.split("#");
+        const vaultRelative = noteDir ? noteDir + "/" + path : path;
+        const resolved = this.app.vault.adapter.getResourcePath(vaultRelative);
+        audio.src = fragment ? resolved + "#" + fragment : resolved;
+        audio.style.cssText = "display:inline;vertical-align:middle;height:1.8em;max-width:10rem;";
       });
     });
   }
