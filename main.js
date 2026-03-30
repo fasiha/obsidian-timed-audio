@@ -25,11 +25,11 @@ module.exports = class TimedAudioPlugin extends Plugin {
         const [start, end] = (fragment ?? "").replace(/^t=/, "").split(",").map(parseFloat);
 
         const btn = createEl("button", {
-          text: "▶",
+          text: "▶️",
           cls: "timed-audio-btn",
           attr: { title: fragment ?? "" },
         });
-        btn.style.cssText = "padding:0 0.4em;font-size:0.8em;vertical-align:middle;cursor:pointer;";
+        btn.style.cssText = "padding:0 0.4em;font-size:0.8em;vertical-align:middle;cursor:pointer;min-width:2em;text-align:center;";
 
         let audio = null;
         let timer = null;
@@ -43,10 +43,10 @@ module.exports = class TimedAudioPlugin extends Plugin {
           audio = new Audio(url);
           audio.currentTime = start;
           audio.play();
-          btn.setText("⏹");
+          btn.setText("⏹️");
           timer = setTimeout(() => audio.pause(), (end - start) * 1000);
           audio.addEventListener("pause", () => {
-            btn.setText("▶");
+            btn.setText("▶️");
             clearTimeout(timer);
           }, { once: true });
         });
