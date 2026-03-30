@@ -1,11 +1,17 @@
 /*
   Timed Audio — Obsidian plugin
-  Replaces <timed-audio start="MM:SS.s" end="MM:SS.s" path="file.mp3" />
+  Replaces <span data-timed-audio data-start="MM:SS.s" data-end="MM:SS.s" data-path="file.mp3"></span>
   with a play/stop button that clips the audio to [start, end].
   Only active in Reading mode (MarkdownPostProcessor).
+
+  NOTE: Custom HTML elements like <timed-audio> are stripped by Obsidian's
+  sanitizer before post-processors run. Using <span data-timed-audio> instead
+  because data-* attributes on known elements survive sanitization.
 */
 
 const { Plugin } = require("obsidian");
+
+const TAG = "timed-audio";
 
 /** Parse "MM:SS.s" or "SS.s" into seconds (float). */
 function parseTimestamp(ts) {
@@ -18,50 +24,38 @@ function parseTimestamp(ts) {
 
 module.exports = class TimedAudioPlugin extends Plugin {
   async onload() {
-    this.registerMarkdownPostProcessor((el, ctx) => {
-      el.querySelectorAll("timed-audio").forEach((tag) => {
-        const start = parseTimestamp(tag.getAttribute("start") ?? "0");
-        const end   = parseTimestamp(tag.getAttribute("end")   ?? "0");
-        const file  = tag.getAttribute("path") ?? "";
+    console.log(`[${TAG}] plugin loaded`);
 
-        // Resolve the mp3 path relative to the note's directory.
+    this.registerMarkdownPostProcessor((el, ctx) => {
+      el.querySelectorAll("[data-timed-audio]").forEach((tag) => {
+        const startAttr = tag.dataset.start ?? "0";
+        const endAttr   = tag.dataset.end   ?? "0";
+        const start     = parseTimestamp(startAttr);
+        const end       = parseTimestamp(endAttr);
+
         const noteDir = ctx.sourcePath.replace(/\/[^/]+$/, "");
-        const vaultRelative = noteDir ? noteDir + "/" + file : file;
+        const vaultRelative = noteDir ? noteDir + "/" + (tag.dataset.path ?? "") : (tag.dataset.path ?? "");
         const resourceUrl = this.app.vault.adapter.getResourcePath(vaultRelative);
 
         const btn = createEl("button", {
           text: "▶",
           cls: "timed-audio-btn",
-          title: `Play ${tag.getAttribute("start")} → ${tag.getAttribute("end")}`,
+          title: `Play ${startAttr} → ${endAttr}`,
         });
 
-        let currentAudio = null;
-        let stopTimer    = null;
+        let audio = null;
 
         btn.addEventListener("click", () => {
-          // If something is already playing, stop it.
-          if (currentAudio && !currentAudio.paused) {
-            currentAudio.pause();
+          if (audio && !audio.paused) {
+            audio.pause();
             return;
           }
-
-          const audio = new Audio(resourceUrl);
-          currentAudio = audio;
+          audio = new Audio(resourceUrl);
           audio.currentTime = start;
           audio.play();
           btn.setText("⏹");
-
-          // Automatically stop at the end timestamp.
-          stopTimer = setTimeout(() => audio.pause(), (end - start) * 1000);
-
-          audio.addEventListener(
-            "pause",
-            () => {
-              btn.setText("▶");
-              clearTimeout(stopTimer);
-            },
-            { once: true }
-          );
+          setTimeout(() => audio.pause(), (end - start) * 1000);
+          audio.addEventListener("pause", () => btn.setText("▶"), { once: true });
         });
 
         tag.replaceWith(btn);

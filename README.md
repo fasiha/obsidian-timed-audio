@@ -11,34 +11,52 @@ No build step required — the plugin is plain JavaScript.
 
 ## Usage
 
-Place a `<timed-audio>` tag anywhere in your note:
+Place a `<span data-timed-audio>` tag anywhere in your note:
 
 ```markdown
-また夜が明ければお別れ <timed-audio start="00:04.2" end="00:07.8" path="Shiki no Uta.mp3" />
+春の風… <span data-timed-audio data-start="0:04.200" data-end="0:07.800" data-path="song.webm"></span>
+夢の中で… <span data-timed-audio data-start="0:07.900" data-end="0:11.300" data-path="song.webm"></span>
 ```
 
-In **Reading mode** the tag is replaced by a small ▶ button. Click it to play the clip; click again to stop early. The button returns to ▶ automatically when the clip ends.
+In **Reading mode** each tag is replaced by a small ▶ button. Click it to play the clip; click again to stop early. The button returns to ▶ automatically when the clip ends.
 
 ### Attributes
 
 | Attribute | Format | Description |
 |-----------|--------|-------------|
-| `start` | `MM:SS.s` or `SS.s` | Start time in the audio file |
-| `end` | `MM:SS.s` or `SS.s` | End time (playback stops here automatically) |
-| `path` | filename or relative path | Audio file, resolved relative to the note's folder |
+| `data-start` | `MM:SS.SSS` or `SS.SSS` | Start time in the audio file |
+| `data-end` | `MM:SS.SSS` or `SS.SSS` | End time (playback stops here automatically) |
+| `data-path` | filename or relative path | Audio file, resolved relative to the note's folder |
 
 ### Example file layout
 
 ```
 Music/
-  Shiki no Uta.md
-  Shiki no Uta.mp3
+  lyrics.md
+  song.webm
 ```
 
-The `path` attribute would just be `Shiki no Uta.mp3`.
+The `data-path` attribute would just be `song.webm`.
+
+## Audio format
+
+**Use WebM/Opus (or OGG/Opus), not MP3.**
+
+MP3 does not support accurate random-access seeking. Browsers estimate the byte offset from the timestamp using bitrate math, and the estimate can be off by a variable amount in either direction — sometimes half a second early, sometimes several hundred milliseconds late. There is no way to fix this in the plugin.
+
+WebM/Opus and OGG/Opus have a proper seek index and produce frame-accurate results. To convert:
+
+```sh
+ffmpeg -i input.mp3 -c:a libopus -b:a 96k output.webm
+```
+
+96 kbps Opus often sounds better than 128 kbps MP3 and the file will likely be smaller.
+
+## Generating timestamps
+
+A straightforward workflow using [stable-ts](https://github.com/jianfch/stable-ts) (Whisper-based transcription with word-level timestamps): more information forthcoming.
 
 ## Limitations
 
 - Reading mode only. Live Preview is not supported.
-- Tested with mp3; any format your browser supports should work (m4a, ogg, wav, …).
-- Sub-second seek accuracy depends on the browser's audio decoder; short clips (< 1 s) may be slightly imprecise.
+- The `<span data-timed-audio>` syntax is used instead of a custom element like `<timed-audio />` because Obsidian's HTML sanitizer strips unknown element names before post-processors run; `data-*` attributes on standard elements survive.
