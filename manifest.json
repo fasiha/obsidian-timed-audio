@@ -1,0 +1,10 @@
+{
+  "id": "timed-audio",
+  "name": "Timed Audio",
+  "version": "0.1.0",
+  "minAppVersion": "1.0.0",
+  "description": "Play audio clips bounded by timestamps embedded in notes via <timed-audio> tags.",
+  "author": "fasiha",
+  "authorUrl": "",
+  "isDesktopOnly": false
+}

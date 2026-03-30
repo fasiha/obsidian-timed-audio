@@ -1,0 +1,18 @@
+.timed-audio-btn {
+  display: inline-block;
+  padding: 0 0.4em;
+  margin: 0 0.3em;
+  font-size: 0.8em;
+  line-height: 1.6;
+  vertical-align: middle;
+  cursor: pointer;
+  border: 1px solid var(--interactive-accent);
+  border-radius: 3px;
+  background: transparent;
+  color: var(--interactive-accent);
+}
+
+.timed-audio-btn:hover {
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+}
